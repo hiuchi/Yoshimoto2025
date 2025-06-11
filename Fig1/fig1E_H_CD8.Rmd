@@ -1,0 +1,286 @@
+---
+title: " fig1E, F, G, H"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# Load necessary libraries for making box plot
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(survival)
+library(survminer)
+library(rstatix)
+```
+
+```{r}
+# ファイルパスを指定
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version9.xlsx"
+
+# "原本"タブを読み込む
+data <- read_excel(file_path, sheet = "ex_MIX")
+
+# データの確認
+head(data)
+```
+
+```{r, define color1}
+# Define colors for each category
+colors1 <- c("SCC" = "red", "AC" = "green","GAS" = "lightgreen", "Small" = "blue")
+```
+
+### CD8 number Box plot in 4 histology(SCC, AC, GAS, Small)
+```{r, coefficient of variation1}
+data$Histology <- factor(data$Histology, levels = c("SCC", "AC", "GAS", "Small"))
+```
+
+```{r, define color2}
+# Define colors for each category
+colors2 <- c("positive" = "#F067A6",  "negative" = "#406F79")
+```
+
+```{r  fig.height=4, dpi=600}
+# プロットの作成
+p4 <- ggplot(data, aes(x = Histology, y = CD8_number, fill = Histology)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors1) +
+  stat_compare_means(method = "wilcox.test", 
+                     comparisons = list(c("SCC", "AC"), 
+                                      c("SCC", "GAS"), 
+                                      c("SCC", "Small"),
+                                      c("AC", "GAS"),
+                                      c("AC", "Small"),
+                                      c("GAS", "Small")),
+                     p.adjust.method = "BH",
+                     label = "p.signif",
+                     symnum.args = list(
+                        cutpoints = c(0, 0.001, 0.01, 0.05, 1), 
+                        symbols = c("***", "**", "*", "")
+                     ),
+                      hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "CD8 scores between histological types",
+       x = "Histology",
+       y = "CD8 score (%)") +  # Y軸ラベルを明示的に設定
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+print(p4)
+```
+```{r}
+# プロットの作成
+p5 <- ggplot(data, aes(x = Histology, y = CD8_number, fill = Histology)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors1) +
+  stat_compare_means(method = "wilcox.test", 
+                     comparisons = list(c("SCC", "AC"), 
+                                      c("SCC", "GAS"), 
+                                      c("SCC", "Small"),
+                                      c("AC", "GAS"),
+                                      c("AC", "Small")),
+                     p.adjust.method = "BH",
+                     label = "p.format",  # p値を数値で表示
+                     label.format = function(p) {
+                       # 科学的表記で有効数字2桁に整形
+                       if (p < 0.0001) {
+                         return(sprintf("p = %.1e", signif(p, 2)))
+                       } else {
+                         return(sprintf("p = %.2g", p))
+                       }
+                     },
+                     hide.ns = TRUE,     # 有意でない場合も表示
+                     size = 3,
+                     vjust = 0.1         # p値の位置を調整
+                     ) +
+  labs(#title = "CD8 scores between histological types",
+       x = "Histology",
+       y = "CD8 score (%)") +  # Y軸ラベルを明示的に設定
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+print(p5)
+```
+
+
+
+### Box plot of CD8 number in HPV 
+```{r, coefficient of variation2}
+data$HPV_positive <- factor(data$HPV_positive, levels = c("positive", "negative"))
+
+p2 <- ggplot(data, aes(x = HPV_positive, y = CD8_number, fill = HPV_positive)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors2) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "CD8 scores between HPV status",
+       x = "HPV status",
+       y = "CD8 score (%)") +  # Y軸ラベルを明示的に設定
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r, fig.height=4, dpi=600}
+# Plot all three plots with better layout
+library(gridExtra)
+grid.arrange(p2, ncol = 1)
+```
+
+###CD8 infiltration pie chart by histology
+```{r fig.height=8,fig.width=6, dpi=600}
+# Convert CD8infiltration to an ordered factor
+data$CD8_infilt <- factor(data$CD8_infilt, levels = c("0", "1", "2"))
+
+# Calculate proportions
+df_proportions <- data %>%
+  group_by(Histology, CD8_infilt) %>%
+  summarise(count = n()) %>%
+  mutate(proportion = count / sum(count))
+
+# define color
+cd8_labels <- c("0" = "absent", "1" = "excluded", "2" = "infiltrated")
+cd8_colors <- c("0" = "#325e9a", "1" = "lightblue", "2" = "red")
+
+# 各Histologyグループのサンプル数を計算
+n_counts <- df_proportions %>%
+  group_by(Histology) %>%
+  summarise(n = sum(count)) %>%
+  mutate(title = paste0(Histology, " (n=", n, ")"))  # \nを削除
+
+# プロットの作成
+pHistology <- df_proportions %>%
+  left_join(n_counts, by = "Histology") %>%
+  ggplot(aes(x = "", y = proportion, fill = CD8_infilt)) +
+  geom_bar(stat = "identity", width = 0.05, color = "white", size = 0.5) +
+  coord_polar(theta = "y") +
+  facet_wrap(~ title, ncol = 2) +
+  scale_fill_manual(values = cd8_colors, labels = cd8_labels, name = "CD8 patterns") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 22, face = "bold"),
+    legend.title = element_text(size = 22, face = "bold"),
+    legend.text = element_text(size = 20),
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5),
+    plot.margin = margin(10, 10, 10, 10)
+  ) +
+  #labs(title = "Distribution of CD8 infiltration\nby histological types") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), color = "white", size = 7.5, fontface = "bold")+
+  scale_color_manual(values = c("0" = "white", "1" = "black", "2" = "white"), guide = "none")
+
+print(pHistology)
+```
+
+###CD8 infiltration pie chart by HPV
+```{r fig.height=8,fig.width=6, dpi=600}
+# Convert CD8infiltration to an ordered factor
+data$CD8_infilt <- factor(data$CD8_infilt, levels = c("0", "1", "2"))
+
+# Calculate proportions
+df_proportions2 <- data %>%
+ group_by(HPV_positive, CD8_infilt) %>%
+ summarise(count = n()) %>%
+ mutate(proportion = count / sum(count))
+
+# define color
+cd8_labels <- c("0" = "absent", "1" = "excluded", "2" = "infiltrated")
+cd8_colors <- c("0" = "#325e9a", "1" = "lightblue", "2" = "red")
+
+# 各HPVステータスグループのサンプル数を計算
+n_counts <- df_proportions2 %>%
+ group_by(HPV_positive) %>%
+ summarise(n = sum(count)) %>%
+ mutate(title = paste0(HPV_positive, " (n=", n, ")"))
+
+# プロットの作成
+pHPV <- df_proportions2 %>%
+ left_join(n_counts, by = "HPV_positive") %>%
+ ggplot(aes(x = "", y = proportion, fill = CD8_infilt)) +
+ geom_bar(stat = "identity", width = 0.05, color = "white", size = 0.5) +
+ coord_polar(theta = "y") +
+ facet_wrap(~ title, ncol = 2) +
+ scale_fill_manual(values = cd8_colors, labels = cd8_labels, name = "CD8 patterns") +
+ theme_minimal() +
+ theme(
+   axis.title = element_blank(),
+   axis.text = element_blank(),
+   panel.grid = element_blank(),
+   strip.text = element_text(size = 24, face = "bold"),
+   legend.title = element_text(size = 22, face = "bold"),
+   legend.text = element_text(size = 20),
+   plot.title = element_text(size = 24, face = "bold", hjust = 0.5), 
+   plot.margin = margin(15, 15, 15, 15)
+ ) +
+ #labs(title = "Distribution of CD8 infiltration\nby HPV status") +
+ geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+           position = position_stack(vjust = 0.5), color = "white", size = 8, fontface = "bold")
+
+print(pHPV)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig1 F, H.pdf", width = 6, height = 4)
+# 各プロットを順番に出力
+print(p4, width = 6, height = 4)
+print(p2, width = 6, height = 4)
+dev.off()
+```
+
+
+```{r}
+pdf("Fig1E.pdf")
+print(pHistology, width = 10, height = 10)
+dev.off()
+```
+
+
+```{r}
+pdf("Fig1G.pdf", width = 8, height = 6)
+print(pHPV, width = 8, height = 6)
+# PDFデバイスを閉じる
+dev.off()
+```
+
