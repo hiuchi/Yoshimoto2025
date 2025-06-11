@@ -1,5 +1,3 @@
-setwd("~/Dropbox/Research/taguchi_sensei/yoshimoto_sensei/250328_Figure/")
-
 library(tidyverse)
 library(tximport)
 library(DESeq2)
