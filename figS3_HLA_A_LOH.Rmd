@@ -1,0 +1,283 @@
+---
+title: "HLA-A LOH analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r load package}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(survival) 
+library(survminer)
+library(gridExtra)
+```
+
+```{r read data}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version9.xlsx"
+data_original <- read_excel(file_path, sheet = "LOH")
+data_box <- data_original  # ボックスプロット用のデータをコピー
+data_pie <- data_original  # 円グラフ用のデータをコピー
+data_km <- data_original  # Kaplan-Meierプロット用のデータをコピー
+data_hpvp <- data_original # HPVとの関連性をみるデータをコピー
+```
+
+```{r box plot, fig.height=6, dpi=600}
+# ボックスプロットを作成するための色を定義
+colors <- c("steelblue", "tomato")
+
+# HLA_expressionのボックスプロットを作成
+p1 <- ggplot(data_box, aes(x = HLA_A_LOH, y = HLA_expression, fill = HLA_A_LOH)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors,
+                    name = "HLA-A LOH status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("LOH", "ROH")), # LOHステータスの群を比較
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(title = "Box plot comparing HLA scores\nbetween HLA-A LOH status",
+       x = "HLA-A LOH status",
+       y = "HLA-I scores") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 15),
+    axis.text.y = element_text(color = "black", face = "bold"),
+    axis.title.x = element_text(face = "bold", size = 15), 
+    axis.title.y = element_text(face = "bold", size = 15),
+    title = element_text(color = "black", face = "bold", size = 15),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+# met_aveのボックスプロット
+p2 <- ggplot(data_box, aes(x = HLA_A_LOH, y = met_ave, fill = HLA_A_LOH)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors,
+                    name = "HLA-A LOH status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("LOH", "ROH")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(title = "Box plot comparing methylation scores\nbetween HLA-A LOH status",
+       x = "HLA-A LOH status",
+       y = "methylation scores") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 15),
+    axis.text.y = element_text(color = "black", face = "bold"),
+    axis.title.x = element_text(face = "bold", size = 15), 
+    axis.title.y = element_text(face = "bold", size = 15),
+    title = element_text(color = "black", face = "bold", size = 15),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+# CD8_numberのボックスプロット
+p3 <- ggplot(data_box, aes(x = HLA_A_LOH, y = `CD8_number`, fill = HLA_A_LOH)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors,
+                    name = "HLA-A LOH status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("LOH", "ROH")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(title = "HLA-A",
+       x = "HLA-A LOH status",
+       y = "CD8 score") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r box plot print , fig.height=4, dpi=600}
+# プロットを配置する
+grid.arrange(p1, ncol = 1)
+grid.arrange(p2, ncol = 1)
+grid.arrange(p3, ncol = 1)
+```
+
+
+```{r pie chart, fig.height=6, dpi=600}
+# 円グラフを作成する関数を定義
+create_pie_chart <- function(data, column, title) {
+  # 列の割合を計算
+  df_proportions <- data %>%
+    count(!!sym(column)) %>%
+    mutate(proportion = n / sum(n))
+  
+  # カスタムカラーを定義
+  custom_colors <- c("tomato", "steelblue")  # 色の順序を変更
+  
+  # データの順序を設定（ROHを先に）
+  df_proportions[[column]] <- factor(df_proportions[[column]], levels = c("ROH", "LOH"))
+  
+  # 円グラフを作成
+  p <- ggplot(df_proportions, aes(x = "", y = proportion, fill = !!sym(column))) +
+    geom_bar(stat = "identity", width = 0.5, color = "white", linewidth = 1) +
+    coord_polar(theta = "y", start = 0) +  # start = 0を追加
+    scale_fill_manual(values = custom_colors) +
+    theme_minimal() +
+    theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 22, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 20),
+    plot.title = element_text(size = 24, face = "bold", hjust = 0.5)
+    ) +
+    labs(title = title, fill = "HLA-A LOH status") +  # 凡例のタイトルを日本語に
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)),
+              position = position_stack(vjust = 0.5),
+              color = "white", size = 12, fontface = "bold")
+  
+  print(p)
+}
+
+# HLA_A_LOH列の円グラフを作成
+create_pie_chart(data_km, "HLA_A_LOH", "HLA-A LOH status")
+```
+
+```{r Kaplan-Meier}
+# 生存オブジェクトを作成（再発をイベントとして含む）
+surv_obj <- Surv(time = data_km$PFS, event = data_km$再発)
+
+# LOHステータスに基づいて生存曲線をフィット
+fit <- survfit(surv_obj ~ HLA_A_LOH, data = data_km)
+
+# Kaplan-Meierプロットを作成
+km_plot <- ggsurvplot(fit,
+                      data = data_km,
+                      pval = TRUE,  # p値を表示
+                      conf.int = FALSE,  # 信頼区間を表示する場合にはTRUEに変更を
+                      risk.table = TRUE,  # リスクテーブルを表示
+                      risk.table.height = 0.25,  # リスクテーブルの高さを設定
+                      xlab = "Time (months)",  # x軸のラベル
+                      ylab = "Survival probability",  # y軸のラベル
+                      title = "Kaplan-Meier Curve by HLA-A LOH Status",  # タイトル
+                      palette = c("steelblue", "tomato"),  # カラーパレット
+                      legend.title = "LOH Status",  # 凡例のタイトル
+                      legend.labs = c("ROH", "LOH"),  # 凡例のラベル
+                      font.title = c(14, "bold"),  # タイトルのフォント設定
+                      font.x = c(12),  # x軸のフォント設定
+                      font.y = c(12),  # y軸のフォント設定
+                      font.legend = c(12))  # 凡例のフォント設定
+```
+
+```{r Kaplan-Meier print, fig.height=8, fig.width=8, dpi=600}
+# Kaplan-Meierプロットを表示
+print(km_plot)
+```
+
+
+```{r HPV, fig.width=7, fig.height=5, dpi=600}
+# HPV_positiveのx軸にバーグラフを作成
+plot_hpvp <- ggplot(data_hpvp, aes(x = factor(HPV_positive), fill = factor(HLA_A_LOH))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = colors, name = "HLA_A_LOH") +  # カスタムカラーを適用
+  labs(title = "Distribution of HLA_A_LOH by HPV_positive", 
+       x = "HPV_positive", 
+       y = "Count") + 
+  theme_minimal()
+
+# プロットを表示
+print(plot_hpvp)
+```
+```{r bar plot}
+# データの準備
+data_hpvp <- data_km  # 既存のdata_kmを使用
+
+# カスタムカラーを定義
+custom_colors <- c("steelblue", "tomato")
+
+# 各HPV_positiveグループ内でHLA_A_LOHの割合を計算
+data_hpvp_normalized <- data_hpvp %>%
+  group_by(HPV_positive, HLA_A_LOH) %>%
+  summarise(count = n()) %>%
+  mutate(proportion = count / sum(count) * 100)
+
+# HLA_A_LOHのレベルの順序を逆に指定（"ROH"を先に）
+data_hpvp_normalized$HLA_A_LOH <- factor(data_hpvp_normalized$HLA_A_LOH, levels = c("ROH", "LOH"))
+
+# 積み上げグラフを作成
+plot_stack_normalized <- ggplot(data_hpvp_normalized, aes(x = factor(HPV_positive), y = proportion, fill = HLA_A_LOH)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = rev(custom_colors), name = "HLA_A_LOH") +  # カラーも逆順に
+  labs(title = "Proportion of HLA_A_LOH by HPV_positive (Stacked 100%)", 
+       x = "HPV_positive", 
+       y = "Proportion (%)") + 
+  theme_minimal()
+
+# プロットを表示
+print(plot_stack_normalized)
+```
+
+
+
+```{r test}
+# 分割表を作成
+cont_table <- table(data_hpvp$HLA_A_LOH, data_hpvp$HPV_positive)
+print("Contingency Table (HLA_A_LOH vs HPV_positive):")
+print(cont_table)
+
+# カイ二乗検定を実行
+chi_test <- chisq.test(cont_table)
+print("Chi-square test results:")
+print(chi_test)
+
+# Fisherの正確検定を実行
+fisher_test <- fisher.test(cont_table)
+print("Fisher's Exact Test results:")
+print(fisher_test)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS3HLA-A,box plot.pdf", width = 6, height = 4)
+
+grid.arrange(p1, ncol = 1)
+grid.arrange(p2, ncol = 1)
+grid.arrange(p3, ncol = 1)
+```
+
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS3HLA-A_2,box plot.pdf", width = 8, height = 6)
+
+create_pie_chart(data_km, "HLA_A_LOH", "HLA-A LOH status")
+print(km_plot)
+print(plot_stack_normalized)
+print(plot_hpvp)
+
+# PDFデバイスを閉じる
+dev.off()
+```

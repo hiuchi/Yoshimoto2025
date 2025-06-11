@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(survival)
+library(survminer)
+```
+
+```{r}
+# データの読み込み
+df <- read_excel("D://大学院資料//頸癌データベース//metafile//1_頸癌bulk_metafile_v2.xlsx", sheet = "unmetLOHSCC")
+```
+
+
+```{r,fig.height=6,fig.width=8, dpi=600}
+# カラーパレットの設定
+plot_colors <- c("#F0E442", "#56B4E9", "#009E73", "#E69F00")
+
+# 新しいラベルを2行に分ける
+new_labels <- c("methylated\nLOH", "methylated\nROH", "non-methylated\nLOH", "non-methylated\nROH")
+
+# 箱ひげ図の作成
+p <- ggplot(df, aes(x = `methyl_LOH`, y = CD8_score, fill = `methyl_LOH`)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = plot_colors) +
+  scale_x_discrete(labels = new_labels) +
+  stat_compare_means(method = "wilcox.test",
+                     comparisons = list(
+                       c("non-methylated ROH", "non-methylated LOH"),
+                       c("non-methylated ROH", "methylated ROH"),
+                       c("non-methylated ROH", "methylated LOH")
+                     ),
+                     p.adjust.method = "BH",
+                     label = "p.signif",
+                     symnum.args = list(
+                       cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                       symbols = c("***", "**", "*", "")
+                     ),
+                     hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "CD8 scores by methylation and LOH\nin SCC",
+       x = "methylation and LOH Status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 16),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+print(p)
+```
+
+
+```{r,fig.height=6,fig.width=8, dpi=600}
+# methyl_LOH_or_notのラベルを設定
+df$methyl_LOH_or_not_label <- factor(df$methyl_LOH_or_not,
+                                levels = c(0, 1),
+                                labels = c("methylated or LOH", "non-methylated ROH"))
+# infiltrationの順序を設定
+df$infiltration <- factor(df$infiltration,
+                         levels = c("absent", "excluded", "infiltrated"))
+# 各グループの割合を計算
+proportions <- df %>%
+  group_by(methyl_LOH_or_not_label, infiltration) %>%
+  summarise(count = n()) %>%
+  group_by(methyl_LOH_or_not_label) %>%
+  mutate(percentage = count / sum(count) * 100,
+         proportion = count / sum(count)) # 比率も計算しておく
+
+# infiltrationの順序を変更（absentを一番下に）
+proportions$infiltration <- factor(proportions$infiltration, 
+                                 levels = c("absent", "excluded", "infiltrated"))
+# 積み上げ図の作成
+p3 <- ggplot(proportions, aes(x = methyl_LOH_or_not_label, y = percentage, fill = infiltration)) +
+  geom_bar(stat = "identity", position = "stack") +
+  # 数値ラベルを追加
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5), 
+              color = "white", size = 8, fontface = "bold") +
+  scale_fill_manual(values = c("absent" = "#325e9a", 
+                              "excluded" = "lightblue", 
+                              "infiltrated" = "red")) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(title = "CD8 patterns by methylatedation and LOH status",
+       x = "methylatedation and LOH Status",
+       y = "Percentage (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 15),
+    axis.text.y = element_text(color = "black", face = "bold", size = 12),
+    axis.title.x = element_text(face = "bold", size = 15),
+    axis.title.y = element_text(face = "bold", size = 15),
+    title = element_text(color = "black", face = "bold", size = 15),
+    plot.title = element_text(hjust = 0.5),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold")
+  )
+print(p3)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig6B.pdf", width = 8, height = 6)
+
+print(p)
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig6C.pdf", width = 8, height = 6)
+
+print(p3)
+
+# PDFデバイスを閉じる
+dev.off()
+```

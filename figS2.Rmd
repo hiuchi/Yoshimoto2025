@@ -1,0 +1,393 @@
+---
+title: "HLA allele type"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(broom)
+library(ggplot2)
+```
+
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//HLAtype2441021//HLATOP10.xlsx"
+hla_data <- read_excel(file_path, sheet = "HLA10")
+head(hla_data)
+```
+
+
+```{r}
+# HLAアレルの頻度棒グラフを作成する関数
+create_hla_frequency_plot <- function(data, hla_type) {
+
+# 指定されたHLAタイプで始まる列を取得
+  allele_cols <- grep(paste0("^", hla_type, "\\*"), names(data), value = TRUE)
+  
+# 選択された列を数値に変換し、頻度を計算
+  allele_data <- data[, allele_cols] %>%
+    mutate(across(everything(), as.numeric))
+  
+  allele_freq <- colSums(allele_data, na.rm = TRUE)
+  allele_freq <- sort(allele_freq, decreasing = TRUE)
+  
+# プロット用のデータフレームを作成
+  plot_data <- data.frame(
+    allele = names(allele_freq),
+    frequency = as.numeric(allele_freq)
+  ) %>%
+# 表示をきれいにするためにHLAタイプのプレフィックスを削除
+    mutate(allele = gsub(paste0("^", hla_type, "\\*"), "", allele))
+  
+# プロットを作成
+  p <- ggplot(plot_data, aes(x = reorder(allele, -frequency), y = frequency)) +
+    geom_bar(stat = "identity", fill = "lightblue") +
+    geom_text(aes(label = frequency), vjust = -0.5) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    labs(
+      title = paste("Frequency Distribution of HLA-", hla_type, " Alleles", sep=""),
+      x = "Allele",
+      y = "Frequency/all alleles"
+    ) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  return(p)
+}
+```
+
+
+```{r barplot of HLA}
+# 基本的なHLA頻度計算関数（両関数で共有）
+calculate_hla_frequencies <- function(data, hla_type) {
+  # 指定されたHLAタイプで始まる列を取得
+  allele_cols <- grep(paste0("^", hla_type, "\\*"), names(data), value = TRUE)
+  
+  # HLA_posでデータを分けて頻度を計算
+  pos_data <- data[data$HLA_pos == "pos", allele_cols] %>%
+    mutate(across(everything(), as.numeric))
+  neg_data <- data[data$HLA_pos == "neg", allele_cols] %>%
+    mutate(across(everything(), as.numeric))
+  
+  # 各グループの頻度を計算
+  pos_freq <- colSums(pos_data, na.rm = TRUE)
+  neg_freq <- colSums(neg_data, na.rm = TRUE)
+  
+  # 頻度を結合して合計頻度でソート
+  total_freq <- pos_freq + neg_freq
+  sorted_alleles <- names(sort(total_freq, decreasing = TRUE))
+  
+  # プロット用のデータフレームを作成
+  plot_data <- data.frame(
+    allele = rep(sorted_alleles, 2),
+    frequency = c(pos_freq[sorted_alleles], neg_freq[sorted_alleles]),
+    group = rep(c("Positive", "Negative"), each = length(sorted_alleles))
+  ) %>%
+    mutate(allele = gsub(paste0("^", hla_type, "\\*"), "", allele))
+  
+  return(plot_data)
+}
+
+# 通常の棒グラフを作成する関数
+create_hla_frequency_plot_by_pos <- function(data, hla_type) {
+  plot_data <- calculate_hla_frequencies(data, hla_type)
+  
+  p <- ggplot(plot_data, aes(x = factor(allele, levels = unique(allele)),
+                             y = frequency,
+                             fill = group)) +
+    geom_bar(stat = "identity", position = position_dodge()) +
+    geom_text(aes(label = frequency), 
+              position = position_dodge(width = 0.9),
+              vjust = -0.5,
+              size = 3) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    labs(
+      title = paste("Frequency Distribution of HLA-", hla_type, " Alleles by HLA Expression", sep=""),
+      x = "Allele",
+      y = "Frequency/all alleles",
+      fill = "HLA Expression"
+    ) +
+    scale_fill_manual(values = c("Positive" = "steelblue", "Negative" = "tomato")) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  return(p)
+}
+
+# 積み上げ棒グラフを作成する関数
+create_hla_stacked_frequency_plot <- function(data, hla_type) {
+  plot_data <- calculate_hla_frequencies(data, hla_type)
+  
+  legend_title <- "HLA-I"
+  legend_labels <- c("Positive" = "positive", "Negative" = "negative")
+  
+  p <- ggplot(plot_data, aes(x = factor(allele, levels = unique(allele)),
+                             y = frequency,
+                             fill = group)) +
+    geom_bar(stat = "identity", position = position_stack()) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 15),
+      axis.text.y = element_text(size = 15),
+      axis.title = element_text(size = 15),
+      plot.title = element_text(hjust = 0.5, size = 15),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 15)
+    ) +
+    labs(
+      title = paste("Distribution of HLA-", hla_type, " Alleles by HLA-I status", sep=""),
+      x = "Allele",
+      y = "Frequency/all alleles",
+      fill = legend_title
+    ) +
+    scale_fill_manual(values = c("Positive" = "tomato", "Negative" = "steelblue"),
+                      labels = legend_labels) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  return(p)
+}
+```
+
+
+```{r print barplot1, fig.height=4, dpi=600}
+# 積み上げ棒グラフ
+hla_a_stacked <- create_hla_stacked_frequency_plot(hla_data, "A")
+hla_b_stacked <- create_hla_stacked_frequency_plot(hla_data, "B")
+hla_c_stacked <- create_hla_stacked_frequency_plot(hla_data, "C")
+
+# グラフを表示
+print(hla_a_stacked)
+print(hla_b_stacked)
+print(hla_c_stacked)
+```
+
+```{r barplot of CD8, met, HPV}
+# 頻度計算の共通ロジック
+calculate_hla_frequencies_by_group <- function(data, hla_type, group_col) {
+  # グループ列にNAまたは空の値がある行を除外
+  data <- data[!is.na(data[[group_col]]) & data[[group_col]] != "", ]
+  
+  # 指定されたHLAタイプで始まる列を取得
+  allele_cols <- grep(paste0("^", hla_type, "\\*"), names(data), value = TRUE)
+  
+  # 指定されたグループ列でデータを分割し、頻度を計算
+  group_levels <- unique(data[[group_col]])
+  freq_list <- lapply(group_levels, function(level) {
+    group_data <- data[data[[group_col]] == level, allele_cols] %>%
+      mutate(across(everything(), as.numeric))
+    colSums(group_data, na.rm = TRUE)
+  })
+  names(freq_list) <- group_levels
+  
+  # 頻度を結合して合計頻度でソート
+  total_freq <- Reduce(`+`, freq_list)
+  sorted_alleles <- names(sort(total_freq, decreasing = TRUE))
+  
+  # プロット用のデータフレームを作成
+  plot_data <- do.call(rbind, lapply(names(freq_list), function(level) {
+    data.frame(
+      allele = sorted_alleles,
+      frequency = freq_list[[level]][sorted_alleles],
+      group = level
+    )
+  })) %>%
+    mutate(allele = gsub(paste0("^", hla_type, "\\*"), "", allele))
+  
+  return(plot_data)
+}
+
+# 積み上げ棒グラフを作成する関数
+create_hla_stacked_frequency_plot_by_group <- function(data, hla_type, group_col) {
+  plot_data <- calculate_hla_frequencies_by_group(data, hla_type, group_col)
+  
+  # グループごとに異なる凡例ラベルとタイトルを設定
+  if (group_col == "CD8_pos") {
+    legend_title <- "CD8 patterns"
+    legend_labels <- c("pos" = "infiltrated+excluded", "neg" = "absent")
+  } else if (group_col == "met_pos") {
+    legend_title <- "methylation"
+    legend_labels <- c("pos" = "methylated", "neg" = "non-methylated")
+  }else if (group_col == "HPVpos") {
+    legend_title <- "HPV status"
+    legend_labels <- c("pos" = "positive", "neg" = "negative")
+  }
+  
+  p <- ggplot(plot_data, aes(x = factor(allele, levels = unique(allele)),
+                             y = frequency,
+                             fill = group)) +
+    geom_bar(stat = "identity", position = position_stack()) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 15),
+      axis.text.y = element_text(size = 15),
+      axis.title = element_text(size = 15),
+      plot.title = element_text(hjust = 0.5, size = 15),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 15)
+    ) +
+    labs(
+      title = paste("Distribution of HLA-", hla_type, " Alleles by ", legend_title, sep=""),
+      x = "Allele",
+      y = "Frequency/all alleles",
+      fill = legend_title
+    ) +
+    scale_fill_manual(values = c("pos" = "tomato", "neg" = "steelblue"),
+                      labels = legend_labels) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
+  
+  return(p)
+}
+```
+
+
+```{r print barplot2}
+# 両方のグラフを作成
+# CD8_posで分けたプロット
+hla_a_cd8_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "A", "CD8_pos")
+hla_b_cd8_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "B", "CD8_pos")
+hla_c_cd8_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "C", "CD8_pos")
+# met_posで分けたプロット
+hla_a_met_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "A", "met_pos")
+hla_b_met_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "B", "met_pos")
+hla_c_met_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "C", "met_pos")
+# HPVposで分けたプロット
+hla_a_hpv_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "A", "HPVpos")
+hla_b_hpv_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "B", "HPVpos")
+hla_c_hpv_stacked <- create_hla_stacked_frequency_plot_by_group(hla_data, "C", "HPVpos")
+```
+
+
+```{r barplot of CD8, met, HPV2, fig.height=4, dpi=600}
+# グラフを表示
+print(hla_a_cd8_stacked)
+print(hla_b_cd8_stacked)
+print(hla_c_cd8_stacked)
+print(hla_a_met_stacked)
+print(hla_b_met_stacked)
+print(hla_c_met_stacked)
+print(hla_a_hpv_stacked)
+print(hla_b_hpv_stacked)
+print(hla_c_hpv_stacked)
+```
+
+```{r bar plot of histology}
+# 絶対値を使用して、ヒストロジーごとのHLAアレルの積み上げ棒グラフを作成する関数
+create_hla_histology_plot <- function(data, hla_type) {
+  # ヒストロジーにNAまたは空の値がある行を除外し、'MIX'を除外
+  data <- data[!is.na(data$histology) & data$histology != "" & data$histology != "MIX", ]
+  
+  # 'AC-non'を'AC'に統合
+  data$histology[data$histology == "AC_non"] <- "AC"
+  
+  # 指定されたHLAタイプで始まる列を取得
+  allele_cols <- grep(paste0("^", hla_type, "\\*"), names(data), value = TRUE)
+  
+  # 各ヒストロジータイプの頻度を計算
+  freq_list <- lapply(allele_cols, function(allele) {
+    table(data[[allele]], data$histology)
+  })
+  names(freq_list) <- allele_cols
+  
+  # プロット用のデータフレームを作成
+  plot_data <- do.call(rbind, lapply(names(freq_list), function(allele) {
+    df <- as.data.frame(freq_list[[allele]])
+    df$allele <- allele
+    df
+  }))
+  
+  # 明瞭さのために列名を変更
+  colnames(plot_data) <- c("allele_value", "histology", "frequency", "allele")
+  
+  # アレル値が陽性のデータをフィルタリング
+  plot_data <- plot_data[plot_data$allele_value == 1, ]
+  
+  # 各アレルの合計頻度を計算してソート
+  total_freq <- aggregate(frequency ~ allele, plot_data, sum)
+  allele_order <- total_freq$allele[order(total_freq$frequency, decreasing = TRUE)]
+  
+  # 表示用にアレル名をクリーンアップ
+  plot_data$allele_clean <- gsub(paste0("^", hla_type, "\\*"), "", plot_data$allele)
+  
+  # テキストラベルの位置を計算
+  plot_data_with_pos <- plot_data %>%
+    group_by(allele) %>%
+    arrange(desc(histology)) %>%
+    mutate(
+      total = sum(frequency),
+      prop = frequency / total,
+      pos = cumsum(frequency) - 0.5 * frequency
+    )
+  
+  # カスタムカラーパレットを作成
+  histology_colors <- c("SCC" = "red",
+                        "AC" = "green",
+                        "GAS" = "lightgreen",
+                        "Small" = "blue")
+  
+  # プロットを作成
+  p <- ggplot(plot_data_with_pos, 
+              aes(x = factor(allele_clean, levels = unique(allele_clean)),
+                  y = frequency,
+                  fill = histology)) +
+    geom_bar(stat = "identity") +
+    #geom_text(aes(label = ifelse(frequency >= 2, as.character(frequency), ""),   #数字を書きたければここの#を外す
+                  #y = pos),
+              #color = "white", size = 3) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 15),
+      axis.text.y = element_text(size = 15),
+      axis.title = element_text(size = 15),
+      plot.title = element_text(hjust = 0.5, size = 15),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 15)
+    ) +
+    labs(
+      title = paste("Distribution of HLA-", hla_type, " Alleles by Histologcal types", sep=""),
+      x = "Allele",
+      y = "Frequency/all alleles",
+      fill = "Histology"
+    ) +
+    scale_fill_manual(values = histology_colors)
+  
+  return(p)
+}
+```
+
+
+```{r print barplot3, fig.height=4, dpi=600}
+# ヒストロジーで分けたHLA-A、HLA-B、HLA-Cのプロットを作成
+hla_a_histology_plot <- create_hla_histology_plot(hla_data, "A")
+print(hla_a_histology_plot)
+hla_b_histology_plot <- create_hla_histology_plot(hla_data, "B")
+print(hla_b_histology_plot)
+hla_c_histology_plot <- create_hla_histology_plot(hla_data, "C")
+print(hla_c_histology_plot)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS2.pdf", width = 6, height = 4)
+print(hla_a_stacked)
+print(hla_b_stacked)
+print(hla_c_stacked)
+print(hla_a_cd8_stacked)
+print(hla_b_cd8_stacked)
+print(hla_c_cd8_stacked)
+print(hla_a_hpv_stacked)
+print(hla_b_hpv_stacked)
+print(hla_c_hpv_stacked)
+print(hla_a_histology_plot)
+print(hla_b_histology_plot)
+print(hla_c_histology_plot)
+```
+

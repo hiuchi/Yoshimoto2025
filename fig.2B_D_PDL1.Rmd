@@ -1,0 +1,306 @@
+---
+title: "PDL1 figure"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+#   excel file load
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version9.xlsx"
+data <- read_excel(file_path, sheet = "original")
+head(data)
+```
+
+```{r}
+# 1. 共通の色定義
+all_colors <- c(
+  "absent" = "#325e9a",
+  "excluded" = "lightblue",
+  "infiltrated" = "red",
+  "positive" = "#E07A5F",
+  "negative" = "#38A89D",
+  "pos" = "#E07A5F",    # PDL1用
+  "neg" = "#38A89D"    # PDL1用
+)
+```
+
+
+```{r}
+# 2. 単純な円グラフ用の関数定義
+create_pie_chart <- function(data, column, title) {
+  # データのコピーを作成
+  data_mod <- data
+  
+  # データ内のPDL1posの値を変更
+  if(column == "PDL1pos") {
+    data_mod[[column]] <- plyr::mapvalues(data_mod[[column]],
+                                         from = c("pos", "neg"),
+                                         to = c("positive", "negative"))
+  }
+  
+  # 総数を計算
+  total_n <- nrow(data_mod)
+  
+  df_proportions <- data_mod %>% 
+    dplyr::count(!!sym(column)) %>% 
+    mutate(proportion = n / sum(n))
+  
+  # 使用する色を現在のカテゴリーから選択
+  colors_to_use <- all_colors[unique(data_mod[[column]])]
+  
+  p <- ggplot(df_proportions, aes(x = "", y = proportion, fill = !!sym(column))) +
+    geom_bar(stat = "identity", width = 0.5, color = "white", size = 1) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values = colors_to_use, 
+                     name = "PDL1 status") +
+    theme_minimal() +
+    theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 26, face = "bold"),
+    legend.title = element_text(size = 24, face = "bold"),
+    legend.text = element_text(size = 26),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+    ) +
+    labs(title = title) +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5), 
+              color = "white", size = 12, fontface = "bold")
+  
+  print(p)
+}
+```
+
+
+```{r fig.height=4, dpi=600}
+# 3. 最初の円グラフの作成
+create_pie_chart(data, "PDL1pos", "PDL1 expression (n=98)")
+```
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig2B.pdf", width = 8, height = 6)
+
+# 各プロットを順番に出力
+create_pie_chart(data, "PDL1pos", "PDL1 expression (n=98)")
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# PDL1 statusの因子レベル設定（共通）
+data$PDL1pos <- factor(data$PDL1pos, levels = c("pos", "neg"))
+
+# 4. Box plotの作成
+pPDL1 <- ggplot(data, aes(x = PDL1pos, y = CD8_number, fill = PDL1pos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("pos", "neg")],
+                   labels = c("pos" = "positive", "neg" = "negative"),
+                   name = "PDL1 status") +
+  scale_x_discrete(labels = c("pos" = "positive", "neg" = "negative")) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("pos", "neg")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "CD8 score between PDL1 status",
+       x = "PDL1 status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r}
+# 4. Box plotの作成
+pPDL1_2 <- ggplot(data, aes(x = PDL1pos, y = CD8_number, fill = PDL1pos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("pos", "neg")],
+                   labels = c("pos" = "positive", "neg" = "negative"),
+                   name = "PDL1 status") +
+  scale_x_discrete(labels = c("pos" = "positive", "neg" = "negative")) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("pos", "neg")),
+                    p.adjust.method = "BH",
+                    label = "p.format",  # p値を数値で表示に変更
+                    label.format = function(p) {
+                      # 科学的表記で有効数字2桁に整形
+                      if (p < 0.0001) {
+                        return(sprintf("p = %.1e", signif(p, 2)))
+                      } else {
+                        return(sprintf("p = %.2g", p))
+                      }
+                    },
+                    hide.ns = FALSE,  # 有意でない場合も表示するよう変更
+                    size = 3,
+                    vjust = 0.1  # p値の位置を調整
+                   ) +
+  labs(title = "CD8 score between PDL1 status",
+       x = "PDL1 status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+# 5. CD8浸潤パターンと層別化された円グラフの準備
+# CD8浸潤のラベル付け
+data$CD8_infilt <- factor(data$CD8_infilt, levels = c("0", "1", "2"))
+data$CD8_infilt_labeled <- plyr::mapvalues(data$CD8_infilt,
+                                          from = c("0", "1", "2"),
+                                          to = c("absent", "excluded", "infiltrated"))
+
+# PDL1のラベル付け
+data$PDL1pos_labeled <- plyr::mapvalues(data$PDL1pos,
+                                       from = c("pos", "neg"),
+                                       to = c("positive", "negative"))
+
+# 6. 層別化された円グラフ用のデータ準備
+df_proportions <- data %>%
+  group_by(PDL1pos_labeled, CD8_infilt_labeled) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(PDL1pos_labeled) %>%
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+group_counts <- data %>%
+  group_by(PDL1pos_labeled) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(label = paste0(PDL1pos_labeled, "\n(n=", n, ")"))
+
+# 7. 層別化された円グラフの作成
+pPDL12 <- df_proportions %>%
+  ggplot(aes(x = "", y = proportion, fill = CD8_infilt_labeled)) +
+  geom_bar(stat = "identity", width = 0.5, color = "white", size = 1) +
+  coord_polar(theta = "y") +
+  facet_wrap(~ PDL1pos_labeled, ncol = 2,
+             labeller = as_labeller(setNames(group_counts$label, group_counts$PDL1pos_labeled))) +
+  scale_fill_manual(values = all_colors,
+                   name = "CD8 patterns") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 22, face = "bold"),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+  ) +
+  labs(title = "Distribution of CD8 patterns\nby PDL1 status") +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5),
+            color = "white", 
+            size = 8,
+            fontface = "bold")
+```
+
+
+```{r}
+# 8. SCCのみのデータ作成と解析
+# Filter for SCC only
+data_scc <- data[data$Histology == "SCC", ]
+data_scc$PDL1pos <- factor(data_scc$PDL1pos, levels = c("pos","neg"))
+
+# 9. SCCのBox plot作成
+pPDL1scc <- ggplot(data_scc, aes(x = PDL1pos, y = CD8_number, fill = PDL1pos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("pos", "neg")],
+                   labels = c("pos" = "positive", "neg" = "negative"),
+                   name = "PDL1 status") +
+  scale_x_discrete(labels = c("pos" = "positive", "neg" = "negative")) +
+  stat_compare_means(method = "t.test",
+                    comparisons = list(c("pos", "neg")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "CD8 score between PDL1 status in SCC",
+       x = "PDL1 status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r fig.height=4, dpi=600}
+# グラフの表示
+library(gridExtra)
+grid.arrange(pPDL1, ncol = 1)      # 箱ひげ図
+grid.arrange(pPDL1_2, ncol = 1)
+print(pPDL1scc)                    # SCC限定の箱ひげ図
+```
+```{r fig.height=6, dpi=600}
+print(pPDL12)                      # CD8浸潤パターンの円グラフ
+```
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig2C.pdf", width = 8, height = 6)
+
+# 各プロットを順番に出力
+print(pPDL12)   
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig2D, G.pdf", width = 6, height = 4)
+
+print(pPDL1scc)             
+grid.arrange(pPDL1, ncol = 1)
+
+# PDFデバイスを閉じる
+dev.off()
+```

@@ -1,0 +1,211 @@
+---
+title: "PDL1 expression by histology"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+# Load necessary libraries for making box plot
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+```
+
+```{r}
+# ファイルパスを指定
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version9.xlsx"
+
+# "原本"タブを読み込む
+data <- read_excel(file_path, sheet = "ex_MIX")
+
+# データの確認
+head(data)
+```
+
+```{r, define color1}
+# Define colors for each category
+colors1 <- c("SCC" = "red", "AC" = "green","GAS" = "lightgreen", "Small" = "blue")
+```
+
+### Box plot of PDL1 expression in 4 histology(SCC, AC, GAS, Small)
+```{r coefficient of variation1}
+data$Histology <- factor(data$Histology, levels = c("SCC", "AC", "GAS", "Small"))
+
+# まずKruskal-Wallis検定を実行
+kw_test <- kruskal.test(PDL1_expression ~ Histology, data = data)
+
+# 箱ひげ図
+p1 <- ggplot(data, aes(x = Histology, y = PDL1_expression, fill = Histology)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors1) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("SCC", "AC"),
+                                     c("SCC", "GAS"),
+                                     c("SCC", "Small")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(title = "Box plot comparing PDL1 expression\nbetween histological types",
+       x = "Histological type",
+       y = "PDL1 expression (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 15),
+    axis.text.y = element_text(color = "black", face = "bold"),
+    axis.title.x = element_text(face = "bold", size = 15), 
+    axis.title.y = element_text(face = "bold", size = 15),
+    title = element_text(color = "black", face = "bold", size = 15),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+# Kruskal-Wallis検定の結果を表示
+print(kw_test)
+```
+
+```{r, fig.height=4, dpi=600}
+# Plot all three plots with better layout
+library(gridExtra)
+grid.arrange(p1, ncol = 1)
+```
+
+
+```{r, define color2}
+# Define colors for each category
+colors2 <- c("positive" = "#E07A5F",  "negative" = "#38A89D")
+```
+
+### Box plot of PDL1 expression in HPV 
+```{r, coefficient of variation2}
+data$HPV_positive <- factor(data$HPV_positive, levels = c("positive", "negative"))
+p2 <- ggplot(data, aes(x = HPV_positive, y = PDL1_expression, fill = HPV_positive)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = colors2) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(title = "Box plot comparing PDL1 expression\nbetween HPV status",
+       x = "HPV status",
+       y = "PDL1 expression (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 15),
+    axis.text.y = element_text(color = "black", face = "bold"),
+    axis.title.x = element_text(face = "bold", size = 15),
+    axis.title.y = element_text(face = "bold", size = 15),
+    title = element_text(color = "black", face = "bold", size = 15),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r, fig.height=4, dpi=600}
+# Plot all three plots with better layout
+library(gridExtra)
+grid.arrange(p2, ncol = 1)
+```
+
+
+###Create function of pie chart
+```{r}
+# Function to create pie charts
+create_pie_chart <- function(data, group_var, title) {
+ # Convert PDL1 expression to an ordered factor
+ data$PDL1pos <- factor(data$PDL1pos, levels = c("neg", "pos"))
+ 
+ # Calculate proportions
+ df_proportions <- data %>%
+   group_by(!!sym(group_var), PDL1pos) %>%
+   summarise(count = n()) %>%
+   mutate(proportion = count / sum(count))
+ 
+ # Calculate sample size for each group
+ n_counts <- df_proportions %>%
+   group_by(!!sym(group_var)) %>%
+   summarise(n = sum(count)) %>%
+   mutate(title = paste0(!!sym(group_var), " (n=", n, ")"))
+ 
+ # Define color and labels
+ cd8_labels <- c("neg" = "negative", "pos" = "positive")
+ cd8_colors <- c("neg" = "#38A89D", "pos" = "#E07A5F")
+ 
+ # Create pie charts
+ p <- df_proportions %>%
+   left_join(n_counts, by = group_var) %>%
+   ggplot(aes(x = "", y = proportion, fill = PDL1pos)) +
+   geom_bar(stat = "identity", width = 0.5, color = "white", size = 1) +
+   coord_polar(theta = "y") +
+   facet_wrap(~ title, ncol = 2) +
+   scale_fill_manual(values = cd8_colors, labels = cd8_labels, name = "PDL1 status") +
+   theme_minimal() +
+   theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text = element_text(size = 16),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+    plot.margin = margin(10, 10, 10, 10)
+   ) +
+   labs(title = title) +
+   geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+             position = position_stack(vjust = 0.5), color = "white", size = 7.5, fontface = "bold")
+ 
+ return(p)
+}
+```
+
+### pie chart of PDL1 expression by histology
+```{r fig.height=10,fig.width=10, dpi=600}
+# Create pie chart for Histology
+pHistology <- create_pie_chart(data, "Histology", "Distribution of PDL1 status\nby histological types")
+print(pHistology)
+```
+
+
+```{r fig.height=8,fig.width=6, dpi=600}
+# Create pie chart for HPV
+pHPV <- create_pie_chart(data, "HPV_positive", "Distribution of PDL1 status\nby HPV")
+print(pHPV)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig2 D, G.pdf", width = 6, height = 4)
+# 各プロットを順番に出力
+grid.arrange(p1, ncol = 1)
+grid.arrange(p2, ncol = 1)
+dev.off()
+```
+
+
+```{r}
+pdf("Fig2E.pdf")
+print(pHistology, width = 8, height = 8)
+dev.off()
+```
+
+
+```{r}
+pdf("Fig2F.pdf", width = 7, height = 5)
+print(pHPV, width = 7, height = 5)
+# PDFデバイスを閉じる
+dev.off()
+```
+

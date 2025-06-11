@@ -1,0 +1,353 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+#   excel file load
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version8.xlsx"
+data <- read_excel(file_path, sheet = "met")
+head(data)
+```
+
+```{r}
+# 1. 共通の色定義
+all_colors <- c(
+  # CD8浸潤パターン用
+  "absent" = "#325e9a",
+  "excluded" = "lightblue",
+  "infiltrated" = "red",
+  # メチル化状態用
+  "methylated" = "#8220F5",
+  "non_methylated" = "#F58F39",
+  # HLAスコア用
+   "positive" = "#003b73",
+  "negative" = "#00aeda",
+  # CD8用
+  "pos" = "red",
+  "neg" = "blue"
+)
+```
+
+
+```{r}
+# 2. 単純な円グラフ用の関数定義
+create_pie_chart <- function(data, column, title) {
+  # データのコピーを作成
+  data_mod <- data
+  
+  # メチル化データの場合のラベル変換
+  if(column == "HLA_methylation") {
+    data_mod[[column]] <- plyr::mapvalues(as.character(data_mod[[column]]),
+                                         from = c("0", "1"),
+                                         to = c("non_methylated", "methylated"))
+  }
+  
+  # 総数を計算
+  total_n <- nrow(data_mod)
+  
+  df_proportions <- data_mod %>% 
+    dplyr::count(!!sym(column)) %>% 
+    mutate(proportion = n / sum(n))
+  
+  # 使用する色を現在のカテゴリーから選択
+  colors_to_use <- all_colors[unique(data_mod[[column]])]
+  
+  p <- ggplot(df_proportions, aes(x = "", y = proportion, fill = !!sym(column))) +
+    geom_bar(stat = "identity", width = 0.5, color = "white", size = 0.6) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values = colors_to_use, 
+                     name = "HLA methylation") +
+    theme_minimal() +
+    theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 26, face = "bold"),
+    legend.title = element_text(size = 24, face = "bold"),
+    legend.text = element_text(size = 26),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+    ) +
+    labs(title = paste0(title, " (n=", total_n, ")")) +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5), 
+              color = "white", size = 12, fontface = "bold")
+  print(p)
+}
+```
+
+
+```{r fig.height=4, dpi=600}
+create_pie_chart(data, "HLA_methylation", "HLA methylation")
+```
+
+
+```{r}
+# 3. Box plotの作成（HLA expression用）
+pMet2 <- ggplot(data, aes(x = factor(HLA_methylation, levels = c("1", "0")), 
+                         y = HLA_expression, 
+                         fill = factor(HLA_methylation, levels = c("1", "0")))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = CD8pos), 
+              width = 0.2, size = 2, alpha = 1) +
+  scale_fill_manual(values = c("#8220F5", "#F58F39"),
+                   labels = c("methylated", "non_methylated"), 
+                   name = "HLA methylation") +
+  scale_x_discrete(labels = c("methylated", "non_methylated")) +
+  scale_color_manual(values = c("neg" = "blue", "pos" = "red"),
+                    labels = c("neg" = "negative", "pos" = "positive"),
+                    name = "CD8") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("1", "0")),
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "Box plot comparing\nHLA expression by methylation status",
+       x = "Methylation status",
+       y = "HLA-I score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+# 4. Box plotの作成（CD8 score用）
+pMet <- ggplot(data, aes(x = factor(HLA_methylation, levels = c("1", "0")), 
+                         y = CD8_number, 
+                         fill = factor(HLA_methylation, levels = c("1", "0")))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = HLApos), 
+              width = 0.2, size = 2, alpha = 1) +
+  scale_fill_manual(values = c("#8220F5", "#F58F39"),
+                   labels = c("methylated", "non_methylated"), 
+                   name = "HLA methylation") +
+  scale_x_discrete(labels = c("methylated", "non_methylated")) +
+  scale_color_manual(values = all_colors[c("neg", "pos")],
+                    labels = c("neg" = "negative", "pos" = "positive"),
+                    name = "HLA") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("1", "0")),
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "Box plot comparing\nCD8 score by methylation status",
+       x = "Methylation status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r}
+# 5. CD8浸潤パターンと層別化された円グラフの準備
+# CD8浸潤のラベル付け
+data$CD8_infilt <- factor(data$CD8_infilt, levels = c("0", "1", "2"))
+data$CD8_infilt_labeled <- plyr::mapvalues(data$CD8_infilt,
+                                          from = c("0", "1", "2"),
+                                          to = c("absent", "excluded", "infiltrated"))
+
+# メチル化状態のラベル付け
+data$HLA_methylation_labeled <- plyr::mapvalues(as.character(data$HLA_methylation),
+                                               from = c("0", "1"),
+                                               to = c("non_methylated", "methylated"))
+
+# 6. 層別化された円グラフ用のデータ準備（CD8浸潤パターン）
+df_proportions <- data %>%
+  group_by(HLA_methylation_labeled, CD8_infilt_labeled) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(HLA_methylation_labeled) %>%
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+group_counts <- data %>%
+  group_by(HLA_methylation_labeled) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(label = paste0(HLA_methylation_labeled, " \n(n=", n, ")"))
+
+# 7. CD8浸潤パターンの層別化された円グラフの作成
+pHLA2 <- df_proportions %>%
+  ggplot(aes(x = "", y = proportion, fill = CD8_infilt_labeled)) +
+  geom_bar(stat = "identity", width = 0.5, color = "white", size = 0.6) +
+  coord_polar(theta = "y") +
+  facet_wrap(~ HLA_methylation_labeled, ncol = 2,
+             labeller = as_labeller(setNames(group_counts$label, group_counts$HLA_methylation_labeled))) +
+  scale_fill_manual(values = all_colors[c("absent", "excluded", "infiltrated")],
+                   name = "CD8 patterns") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+  ) +
+  labs(title = "Distribution of CD8 patterns\nby HLA status"
+       ) +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", 
+            size = 8, 
+            fontface = "bold")
+
+# 8. HLAスコアの層別化された円グラフ用のデータ準備
+df_proportions_hla <- data %>%
+  group_by(HLA_methylation_labeled, HLAcutoff) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(HLA_methylation_labeled) %>%
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+# 9. HLAスコアの層別化された円グラフの作成
+pHLA3 <- df_proportions_hla %>%
+  ggplot(aes(x = "", y = proportion, fill = factor(HLAcutoff, 
+                                                  levels = c("0", "1"),
+                                                  labels = c("negative", "positive")))) +
+  geom_bar(stat = "identity", width = 0.5, color = "white", size = 1) +
+  coord_polar(theta = "y") +
+  facet_wrap(~ HLA_methylation_labeled, ncol = 2,
+             labeller = as_labeller(setNames(group_counts$label, group_counts$HLA_methylation_labeled))) +
+  scale_fill_manual(values = all_colors[c("negative", "positive")],
+                   name = "HLA status") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+  ) +
+  labs(title = "Distribution of CD8 patterns\nby HLA status"
+       ) +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", 
+            size = 8, 
+            fontface = "bold")
+```
+
+
+```{r fig.height=4, dpi=800}
+# グラフの表示
+library(gridExtra)
+print(pMet2)     # HLA expressionの箱ひげ図
+print(pMet)      # CD8 scoreの箱ひげ図
+```
+```{r}
+# 3. Box plotの作成（HLA expression用）
+pMet2x <- ggplot(data, aes(x = factor(HLA_methylation, levels = c("1", "0")), 
+                         y = HLA_expression, 
+                         fill = factor(HLA_methylation, levels = c("1", "0")))) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = CD8pos), 
+              width = 0.2, size = 1, alpha = 1) +
+  scale_fill_manual(values = c("#8220F5", "#F58F39"),
+                   labels = c("methylated", "non_methylated"), 
+                   name = "HLA methylation") +
+  scale_x_discrete(labels = c("methylated", "non_methylated")) +
+  scale_color_manual(values = c("neg" = "#4C444D", "pos" = "#4C444D"),
+                    labels = c("neg" = "negative", "pos" = "positive"),
+                    name = "CD8") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("1", "0")),
+                    label = "p.format",  # p値を数値で表示に変更
+                    label.format = function(p) {
+                      # 科学的表記で有効数字2桁に整形
+                      if (p < 0.0001) {
+                        return(sprintf("p = %.1e", signif(p, 2)))
+                      } else {
+                        return(sprintf("p = %.2g", p))
+                      }
+                    },
+                    hide.ns = FALSE,  # 有意でない場合も表示するよう変更
+                    size = 4,
+                    vjust = 0.1  # p値の位置を調整
+                   ) +
+  labs(#title = "Box plot comparing\nHLA expression by methylation status",
+       x = "Methylation status",
+       y = "HLA-I score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r fig.height=5, dpi=600}
+print(pMet2x)    
+```
+
+```{r fig.height=8, dpi=600}
+print(pHLA2)     # CD8浸潤パターンの円グラフ
+print(pHLA3)     # HLAスコアの円グラフ
+```
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig5C, E.pdf", width = 6, height = 4)
+
+print(pMet2)   
+print(pMet) 
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig5B, D.pdf", width = 8, height = 6)
+
+create_pie_chart(data, "HLA_methylation", "HLA methylation")
+print(pHLA2)    
+print(pHLA3)
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+

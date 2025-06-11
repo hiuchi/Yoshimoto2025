@@ -1,0 +1,305 @@
+---
+title: "fig3 HLA piechart"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(gridExtra)
+```
+
+#   excel file load
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version8.xlsx"
+data <- read_excel(file_path, sheet = "original")
+head(data)
+```
+
+```{r}
+# 1. 共通の色定義
+all_colors <- c(
+  "absent" = "#325e9a",
+  "excluded" = "lightblue",
+  "infiltrated" = "red",
+  "positive" = "#003b73",
+  "negative" = "#00aeda"
+)
+```
+
+
+```{r}
+# 2. シンプルな円グラフ用の関数定義
+create_pie_chart <- function(data, column, title) {
+  # データのコピーを作成
+  data_mod <- data
+  
+  # データ内のNewHLAposの値を変更
+  if(column == "NewHLApos" || column == "HLA_status") {
+    data_mod[[column]] <- plyr::mapvalues(data_mod[[column]],
+                                    from = c("pos", "neg"),
+                                    to = c("positive", "negative"))
+  }
+  
+  # 総数を計算
+  total_n <- nrow(data_mod)
+  
+  df_proportions <- data_mod %>% 
+    dplyr::count(!!sym(column)) %>% 
+    mutate(proportion = n / sum(n))
+  
+  # 使用する色を現在のカテゴリーから選択
+  colors_to_use <- all_colors[unique(data_mod[[column]])]
+  
+  p <- ggplot(df_proportions, aes(x = "", y = proportion, fill = !!sym(column))) +
+    geom_bar(stat = "identity", width = 0.05, color = "white", size = 0.5) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values = colors_to_use, 
+                     name = "HLA status") +
+    theme_minimal() +
+    theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 26, face = "bold"),
+    legend.title = element_text(size = 24, face = "bold"),
+    legend.text = element_text(size = 26),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+    ) +
+    labs(title = paste0(title, " (n=", total_n, ")")) +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5), 
+              color = "white", size = 12, fontface = "bold")
+  
+  print(p)
+}
+```
+
+
+```{r fig.height=4, dpi=600}
+# 3. 最初の円グラフの作成
+create_pie_chart(data, "NewHLApos", "HLA expression")
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig4B.pdf", width = 8, height = 6)
+
+# 各プロットを順番に出力
+create_pie_chart(data, "NewHLApos", "HLA expression")
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r fig.height=4, dpi=600}
+# 4. CD8浸潤パターンのデータ準備
+# CD8浸潤のラベル付け
+data$CD8_infilt <- factor(data$CD8_infilt, levels = c("0", "1", "2"))
+cd8_labels <- c("0" = "absent", "1" = "excluded", "2" = "infiltrated")
+data$CD8_infilt_labeled <- plyr::mapvalues(data$CD8_infilt,
+                                          from = c("0", "1", "2"),
+                                          to = cd8_labels)
+
+# HLA statusの設定
+data$NewHLApos <- plyr::mapvalues(data$NewHLApos,
+                              from = c("pos", "neg"),
+                              to = c("positive", "negative"))
+data$NewHLApos <- factor(data$NewHLApos, levels = c("positive", "negative"))
+
+# 5. CD8浸潤パターン別の割合計算
+df_proportions <- data %>%
+  group_by(NewHLApos, CD8_infilt_labeled) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(NewHLApos) %>%
+  mutate(proportion = count / sum(count)) %>%
+  ungroup()
+
+# 6. グループごとの総数計算
+group_counts <- data %>%
+  group_by(NewHLApos) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  mutate(label = paste0(NewHLApos, "\n(n=", n, ")"))
+```
+
+
+```{r}
+# 7. CD8浸潤パターンの層別化された円グラフ作成
+pHLA2 <- df_proportions %>%
+  ggplot(aes(x = "", y = proportion, fill = CD8_infilt_labeled)) +
+  geom_bar(stat = "identity", width = 0.05, color = "white", size = 0.5) +
+  coord_polar(theta = "y") +
+  facet_wrap(~ NewHLApos, ncol = 2, 
+             labeller = as_labeller(setNames(group_counts$label, group_counts$NewHLApos))) +
+  scale_fill_manual(values = all_colors, 
+                   name = "CD8 patterns") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 22, face = "bold"),
+    legend.title = element_text(size = 20, face = "bold"),
+    legend.text = element_text(size = 18),
+    plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+  ) +
+  labs(title = "Distribution of CD8 patterns\nby HLA status"
+       ) +
+  geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), 
+            color = "white", 
+            size = 8, 
+            fontface = "bold")
+```
+
+
+```{r fig.height=6, dpi=600}
+# 8. グラフの表示
+print(pHLA2)
+```
+
+```{r}
+# 8. CD8数の箱ひげ図作成
+pHLA_box <- ggplot(data, aes(x = NewHLApos, y = CD8_number, fill = NewHLApos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("positive", "negative")],
+                   name = "HLA status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "CD8 score between HLA status",
+       x = "HLA status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r fig.height=4, dpi=600}
+grid.arrange(pHLA_box, ncol = 1)  # CD8数の箱ひげ図
+```
+```{r}
+# 8. CD8数の箱ひげ図作成
+pHLA_1_box <- ggplot(data, aes(x = NewHLApos, y = HLA_expression , fill = NewHLApos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("positive", "negative")],
+                   name = "HLA status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "HLA-I score between HLA status",
+       x = "HLA status",
+       y = "HLA-I score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r}
+# 8. CD8数の箱ひげ図作成
+pHLA_box2 <- ggplot(data, aes(x = NewHLApos, y = CD8_number, fill = NewHLApos)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("positive", "negative")],
+                   name = "HLA status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    p.adjust.method = "BH",
+                    label = "p.format",  # p値を数値で表示に変更
+                    label.format = function(p) {
+                      # 科学的表記で有効数字2桁に整形
+                      if (p < 0.0001) {
+                        return(sprintf("p = %.1e", signif(p, 2)))
+                      } else {
+                        return(sprintf("p = %.2g", p))
+                      }
+                    },
+                    hide.ns = FALSE,  # 有意でない場合も表示するよう変更
+                    size = 4,
+                    vjust = 0.1  # p値の位置を調整
+                   ) +
+  labs(title = "CD8 score between HLA status",
+       x = "HLA status",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r fig.height=4, dpi=600}
+grid.arrange(pHLA_1_box, ncol = 1)  # CD8数の箱ひげ図
+```
+
+```{r fig.height=5, dpi=300}
+grid.arrange(pHLA_box2, ncol = 1)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig4C.pdf", width = 8, height = 6)
+
+print(pHLA2)
+
+# PDFデバイスを閉じる
+dev.off()
+```
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig4D.pdf", width = 6, height = 4)
+
+grid.arrange(pHLA_box, ncol = 1) 
+grid.arrange(pHLA_1_box, ncol = 1) 
+
+# PDFデバイスを閉じる
+dev.off()
+```
+

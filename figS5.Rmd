@@ -1,0 +1,565 @@
+---
+title: "補助付き円グラフ"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# 必要なライブラリの読み込み
+library(tidyverse)
+library(readxl)
+```
+
+
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version9.xlsx"
+data <- read_excel(file_path, sheet = "met_ex_MIX")
+head(data)
+```
+
+
+```{r}
+# データ準備用の関数
+prepare_cd8_data <- function(data) {
+  # メインのCD8分布データ
+  main_data <- data %>%
+    group_by(CD8_0.49) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  # CD8陽性・陰性それぞれのメチル化状態データ
+  cd8_pos_data <- data %>%
+    filter(CD8_0.49 == 1) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  cd8_neg_data <- data %>%
+    filter(CD8_0.49 == 0) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  return(list(main_data = main_data, 
+             cd8_pos_data = cd8_pos_data, 
+             cd8_neg_data = cd8_neg_data))
+}
+
+# グラフ作成用の関数
+create_cd8_plot <- function(main_data, subset_data, cd8_type = "negative") {
+  # 色の設定
+  color_values <- c("0" = "#325e9a", "1" = "#fd6921",
+                   "methyl" = "#8220F5", "non_methyl" = "#F58F39")
+  color_labels <- c("CD8 negative", "CD8 positive",
+                   "methylation", "non-methylation")
+  
+  # CD8タイプに応じたデータの選択
+  cd8_index <- if(cd8_type == "negative") 1 else 2
+  y_range <- main_data$ymax[cd8_index] - main_data$ymin[cd8_index]
+  y_start <- main_data$ymin[cd8_index]
+  
+  # プロット作成
+  p <- ggplot() +
+    # メインの円グラフ（CD8の分布）
+    geom_rect(data = main_data,
+              aes(xmin = 0, xmax = 1,
+                  ymin = ymin, ymax = ymax,
+                  fill = factor(CD8_0.49)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = main_data,
+              aes(x = 0.5, y = labelPosition,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # メチル化状態の分布（外側）
+    geom_rect(data = subset_data,
+              aes(xmin = 1.5, xmax = 2.5,
+                  ymin = ymin * y_range + y_start,
+                  ymax = ymax * y_range + y_start,
+                  fill = factor(met_cutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = subset_data,
+              aes(x = 2,
+                  y = labelPosition * y_range + y_start,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # 接続線(必要時には#を消す)
+    #geom_segment(data = data.frame(x = 1, y = y_start),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    #geom_segment(data = data.frame(x = 1, y = y_start + y_range),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    
+    # 色の設定
+    scale_fill_manual(values = color_values,
+                     labels = color_labels) +
+    
+    # 座標系とテーマの設定
+    coord_polar(theta = "y") +
+    theme_void() +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+    
+    # タイトルの設定
+    labs(title = paste("CD8", toupper(substr(cd8_type, 1, 1)), 
+                      tolower(substr(cd8_type, 2, nchar(cd8_type))),
+                      "and Methylation Distribution"),
+         fill = "Status")
+  
+  return(p)
+}
+
+prepared_data <- prepare_cd8_data(data)
+
+# CD8陰性群のグラフ作成
+p_neg <- create_cd8_plot(prepared_data$main_data, 
+                        prepared_data$cd8_neg_data, 
+                        "negative")
+```
+
+
+```{r fig.height=8,fig.width=10, dpi=600}
+print(p_neg)
+```
+
+```{r}
+# データ準備用の関数
+prepare_cd8_data <- function(data) {
+  # メインのCD8分布データ
+  main_data <- data %>%
+    group_by(CD8_0.49) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  # CD8陽性・陰性それぞれのメチル化状態データ
+  cd8_pos_data <- data %>%
+    filter(CD8_0.49 == 1) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  cd8_neg_data <- data %>%
+    filter(CD8_0.49 == 0) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  return(list(main_data = main_data, 
+             cd8_pos_data = cd8_pos_data, 
+             cd8_neg_data = cd8_neg_data))
+}
+
+# グラフ作成用の関数
+create_cd8_plot <- function(main_data, subset_data, cd8_type = "positive") {
+  # 色の設定
+  color_values <- c("0" = "#325e9a", "1" = "#fd6921",
+                   "methyl" = "#8220F5", "non_methyl" = "#F58F39")
+  color_labels <- c("CD8 negative", "CD8 positive",
+                   "methylation", "non-methylation")
+  
+  # CD8タイプに応じたデータの選択
+  cd8_index <- if(cd8_type == "negative") 1 else 2
+  y_range <- main_data$ymax[cd8_index] - main_data$ymin[cd8_index]
+  y_start <- main_data$ymin[cd8_index]
+  
+  # プロット作成
+  p <- ggplot() +
+    # メインの円グラフ（CD8の分布）
+    geom_rect(data = main_data,
+              aes(xmin = 0, xmax = 1,
+                  ymin = ymin, ymax = ymax,
+                  fill = factor(CD8_0.49)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = main_data,
+              aes(x = 0.5, y = labelPosition,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # メチル化状態の分布（外側）
+    geom_rect(data = subset_data,
+              aes(xmin = 1.5, xmax = 2.5,
+                  ymin = ymin * y_range + y_start,
+                  ymax = ymax * y_range + y_start,
+                  fill = factor(met_cutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = subset_data,
+              aes(x = 2,
+                  y = labelPosition * y_range + y_start,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # 接続線
+    #geom_segment(data = data.frame(x = 1, y = y_start),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    #geom_segment(data = data.frame(x = 1, y = y_start + y_range),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    
+    # 色の設定
+    scale_fill_manual(values = color_values,
+                     labels = color_labels) +
+    
+    # 座標系とテーマの設定
+    coord_polar(theta = "y") +
+    theme_void() +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+    
+    # タイトルの設定
+    labs(title = paste("CD8", toupper(substr(cd8_type, 1, 1)), 
+                      tolower(substr(cd8_type, 2, nchar(cd8_type))),
+                      "and Methylation Distribution"),
+         fill = "Status")
+  
+  return(p)
+}
+
+# データ準備
+prepared_data <- prepare_cd8_data(data)
+
+# CD8陽性群のグラフ作成
+p_pos <- create_cd8_plot(prepared_data$main_data, 
+                        prepared_data$cd8_pos_data, 
+                        "positive")
+```
+
+
+```{r fig.height=8,fig.width=10, dpi=600}
+print(p_pos)
+```
+
+```{r}
+# データ準備用の関数
+prepare_hla_data <- function(data) {
+  # メインのHLA分布データ
+  main_data_hla <- data %>%
+    group_by(HLAcutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  # HLA陽性・陰性それぞれのメチル化状態データ
+  hla_pos_data <- data %>%
+    filter(HLAcutoff == 1) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  hla_neg_data <- data %>%
+    filter(HLAcutoff == 0) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  return(list(main_data = main_data_hla, 
+             hla_pos_data = hla_pos_data, 
+             hla_neg_data = hla_neg_data))
+}
+
+# グラフ作成用の関数
+create_hla_plot <- function(main_data, subset_data, hla_type = "positive") {
+  # 色の設定
+  color_values <- c("0" = "#00aeda" , "1" = "#003b73",
+                   "methyl" = "#8220F5", "non_methyl" = "#F58F39")
+  color_labels <- c("HLA negative", "HLA positive",
+                   "methylation", "non-methylation")
+  
+  # HLAタイプに応じたデータの選択
+  hla_index <- if(hla_type == "negative") 1 else 2
+  y_range <- main_data$ymax[hla_index] - main_data$ymin[hla_index]
+  y_start <- main_data$ymin[hla_index]
+  
+  # プロット作成
+  p_hla <- ggplot() +
+    # メインの円グラフ（HLAの分布）
+    geom_rect(data = main_data,
+              aes(xmin = 0, xmax = 1,
+                  ymin = ymin, ymax = ymax,
+                  fill = factor(HLAcutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = main_data,
+              aes(x = 0.5, y = labelPosition,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # メチル化状態の分布（外側）
+    geom_rect(data = subset_data,
+              aes(xmin = 1.5, xmax = 2.5,
+                  ymin = ymin * y_range + y_start,
+                  ymax = ymax * y_range + y_start,
+                  fill = factor(met_cutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = subset_data,
+              aes(x = 2,
+                  y = labelPosition * y_range + y_start,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # 接続線
+    #geom_segment(data = data.frame(x = 1, y = y_start),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    #geom_segment(data = data.frame(x = 1, y = y_start + y_range),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    
+    # 色の設定
+    scale_fill_manual(values = color_values,
+                     labels = color_labels) +
+    
+    # 座標系とテーマの設定
+    coord_polar(theta = "y") +
+    theme_void() +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+    
+    # タイトルの設定
+    labs(title = paste("HLA", toupper(substr(hla_type, 1, 1)), 
+                      tolower(substr(hla_type, 2, nchar(hla_type))),
+                      "and Methylation Distribution"),
+         fill = "Status")
+  
+  return(p_hla)
+}
+
+# データ準備
+prepared_data_hla <- prepare_hla_data(data)
+
+# HLA陽性群のグラフ作成
+p_hla_pos <- create_hla_plot(prepared_data_hla$main_data, 
+                            prepared_data_hla$hla_pos_data, 
+                            "positive")
+```
+
+
+```{r fig.height=8,fig.width=10, dpi=600}
+print(p_hla_pos)
+```
+
+```{r}
+# 必要なライブラリの読み込み
+library(tidyverse)
+library(readxl)
+
+# データ準備用の関数
+prepare_hla_neg_data <- function(data) {
+  # メインのHLA分布データ
+  main_data_hla_neg <- data %>%
+    group_by(HLAcutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  # HLA陽性・陰性それぞれのメチル化状態データ
+  hla_pos_data_neg <- data %>%
+    filter(HLAcutoff == 1) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  hla_neg_data_neg <- data %>%
+    filter(HLAcutoff == 0) %>%
+    group_by(met_cutoff) %>%
+    summarise(count = n()) %>%
+    mutate(
+      proportion = count/sum(count),
+      ymax = cumsum(proportion),
+      ymin = c(0, head(ymax, n=-1)),
+      labelPosition = (ymax + ymin) / 2,
+      label = paste0(round(proportion * 100), "%")
+    )
+  
+  return(list(main_data = main_data_hla_neg, 
+             hla_pos_data = hla_pos_data_neg, 
+             hla_neg_data = hla_neg_data_neg))
+}
+
+# グラフ作成用の関数
+create_hla_neg_plot <- function(main_data, subset_data, hla_type = "negative") {
+  # 色の設定
+  color_values <- c("0" = "#00aeda" , "1" = "#003b73",
+                   "methyl" = "#8220F5", "non_methyl" = "#F58F39")
+  color_labels <- c("HLA negative", "HLA positive",
+                   "methylation", "non-methylation")
+  
+  # HLAタイプに応じたデータの選択
+  hla_index <- if(hla_type == "negative") 1 else 2
+  y_range <- main_data$ymax[hla_index] - main_data$ymin[hla_index]
+  y_start <- main_data$ymin[hla_index]
+  
+  # プロット作成
+  p_hla_n <- ggplot() +
+    # メインの円グラフ（HLAの分布）
+    geom_rect(data = main_data,
+              aes(xmin = 0, xmax = 1,
+                  ymin = ymin, ymax = ymax,
+                  fill = factor(HLAcutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = main_data,
+              aes(x = 0.5, y = labelPosition,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # メチル化状態の分布（外側）
+    geom_rect(data = subset_data,
+              aes(xmin = 1.5, xmax = 2.5,
+                  ymin = ymin * y_range + y_start,
+                  ymax = ymax * y_range + y_start,
+                  fill = factor(met_cutoff)),
+              color = "white",
+              size = 1.5,
+              alpha = 1) +
+    geom_text(data = subset_data,
+              aes(x = 2,
+                  y = labelPosition * y_range + y_start,
+                  label = label),
+              color = "white", 
+              size = 6, 
+              fontface = "bold") +
+    
+    # 接続線(必要時は#を消す)
+    #geom_segment(data = data.frame(x = 1, y = y_start),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    #geom_segment(data = data.frame(x = 1, y = y_start + y_range),
+                 #aes(x = x, xend = 1.5,
+                     #y = y, yend = y),
+                 #linetype = "dashed") +
+    
+    # 色の設定
+    scale_fill_manual(values = color_values,
+                     labels = color_labels) +
+    
+    # 座標系とテーマの設定
+    coord_polar(theta = "y") +
+    theme_void() +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+    
+    # タイトルの設定
+    labs(title = paste("HLA", toupper(substr(hla_type, 1, 1)), 
+                      tolower(substr(hla_type, 2, nchar(hla_type))),
+                      "and Methylation Distribution"),
+         fill = "Status")
+  
+  return(p_hla_n)
+}
+
+# データ準備
+prepared_data_hla_neg <- prepare_hla_neg_data(data)
+
+# HLA陰性群のグラフ作成
+p_hla_neg <- create_hla_neg_plot(prepared_data_hla_neg$main_data, 
+                                prepared_data_hla_neg$hla_neg_data, 
+                                "negative")
+```
+
+
+```{r fig.height=8,fig.width=10, dpi=600}
+print(p_hla_neg)
+```
+

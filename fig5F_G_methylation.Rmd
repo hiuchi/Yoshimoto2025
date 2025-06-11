@@ -1,0 +1,339 @@
+---
+title: "fig6 methylation histology and HPV"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+# Load necessary libraries for making box plot
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+```
+
+```{r}
+# ファイルパスを指定
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version8.xlsx"
+
+# "原本"タブを読み込む
+data <- read_excel(file_path, sheet = "met_ex_MIX")
+
+# データの確認
+head(data)
+```
+
+```{r}
+all_colors <- c(
+  # 組織型用
+  "SCC" = "red",
+  "AC" = "green",
+  "GAS" = "lightgreen",
+  "Small" = "blue",
+  # CD8浸潤パターン用
+  "absent" = "#325e9a",
+  "excluded" = "lightblue",
+  "infiltrated" = "red",
+  # HPVステータス用
+  "positive" = "#F067A6",
+  "negative" = "#406F79"
+)
+```
+
+
+
+```{r}
+# 1. 組織型別のHLAメチル化の箱ひげ図
+data$Histology <- factor(data$Histology, levels = c("SCC", "AC", "GAS", "Small"))
+
+pHist_met <- ggplot(data, aes(x = Histology, y = met_ave, fill = Histology)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("SCC", "AC", "GAS", "Small")]) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("SCC", "AC"),
+                                     c("SCC", "GAS"),
+                                     c("SCC", "Small"),
+                                     c("AC", "GAS"),
+                                     c("AC", "Small"),
+                                     c("GAS", "Small")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE) +
+  labs(#title = "HLA methylation between histological types",
+       x = "Histological type",
+       y = "HLA methylation (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+
+# 2. HPVステータス別のHLAメチル化の箱ひげ図
+data$HPV_positive <- factor(data$HPV_positive, levels = c("positive", "negative"))
+
+pHPV_met <- ggplot(data, aes(x = HPV_positive, y = met_ave, fill = HPV_positive)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("positive", "negative")],
+                   name = "HPV status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "HLA methylation between HPV status",
+       x = "HPV status",
+       y = "HLA methylation (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+# 3. メチル化状態の円グラフ用の関数定義
+create_pie_chart_met <- function(data, group_var, title, is_histology = TRUE) {
+  # データのコピーを作成
+  data_mod <- data
+  
+  # メチル化状態のfactor設定
+  data_mod$HLA_methylation <- factor(data_mod$HLA_methylation, levels = c("1", "0"))
+  data_mod$HLA_methylation_labeled <- plyr::mapvalues(data_mod$HLA_methylation,
+                                                     from = c("1", "0"),
+                                                     to = c("methylated", "non_methylated"))
+  
+  # データ準備
+  group_var_sym <- sym(group_var)
+  
+  # 各グループの割合計算
+  df_proportions <- data_mod %>%
+    group_by(!!group_var_sym, HLA_methylation_labeled) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    group_by(!!group_var_sym) %>%
+    mutate(proportion = count / sum(count)) %>%
+    ungroup()
+  
+  # グループごとの総数計算
+  n_counts <- df_proportions %>%
+    group_by(!!group_var_sym) %>%
+    summarise(n = sum(count), .groups = "drop") %>%
+    mutate(title = paste0(!!group_var_sym, " (n=", n, ")"))
+  
+  # テーマ設定（ヒストロジー用かHPV用かで分岐）
+  if (is_histology) {
+    # ヒストロジー用の設定
+    theme_settings <- theme_minimal() +
+      theme(
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.title = element_text(size = 22, face = "bold"),
+        legend.text = element_text(size = 20),
+        plot.title = element_text(size = 25, face = "bold", hjust = 0.5),
+        plot.margin = margin(10, 10, 10, 10)
+      )
+    text_size <- 7.5
+    bar_width <- 0.05
+  } else {
+    # HPV用の設定
+    theme_settings <- theme_minimal() +
+      theme(
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 22, face = "bold"),
+        legend.title = element_text(size = 20, face = "bold"),
+        legend.text = element_text(size = 18),
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+        plot.margin = margin(15, 15, 15, 15)
+      )
+    text_size <- 8
+    bar_width <- 0.05
+  }
+  
+  # グラフ作成
+  p <- df_proportions %>%
+    left_join(n_counts, by = as.character(group_var)) %>%
+    ggplot(aes(x = "", y = proportion, fill = HLA_methylation_labeled)) +
+    geom_bar(stat = "identity", width = bar_width, color = "white", size = 0.5) +
+    coord_polar(theta = "y") +
+    facet_wrap(~ title, ncol = 2) +
+    scale_fill_manual(values = c("methylated" = "#8220F5", 
+                                "non_methylated" = "#F58F39"),
+                     name = "HLA methylation") +
+    theme_settings +
+    labs(title = title) +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5),
+              color = "white", 
+              size = text_size,
+              fontface = "bold") +
+    scale_color_manual(values = c("0" = "white", "1" = "black", "2" = "white"), guide = "none")
+  
+  return(p)
+}
+
+# 4. 組織型別とHPVステータス別の円グラフ作成
+pHistology_met <- create_pie_chart_met(data, "Histology", 
+                                      "Distribution of HLA methylation\nby histological type",
+                                      is_histology = TRUE)
+pHPV_met <- create_pie_chart_met(data, "HPV_positive", 
+                                "Distribution of HLA methylation\nby HPV status",
+                                is_histology = FALSE)
+```
+
+```{r}
+# 1. HPVステータス別のHLAメチル化の箱ひげ図作成
+data$HPV_positive <- factor(data$HPV_positive, levels = c("positive", "negative"))
+
+pHPV_met2 <- ggplot(data, aes(x = HPV_positive, y = met_ave, fill = HPV_positive)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("positive", "negative")],
+                   name = "HPV status") +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("positive", "negative")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(#title = "HLA methylation between HPV status",
+       x = "HPV status",
+       y = "HLA methylation (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r fig.height=4, dpi=600}
+# 5. グラフの表示
+library(gridExtra)
+print(pHist_met)
+print(pHPV_met2)
+```
+```{r}
+data$Histology <- factor(data$Histology, levels = c("SCC", "AC", "GAS", "Small"))
+#組織型別のHLAメチル化の箱ひげ図
+pHist_metx <- ggplot(data, aes(x = Histology, y = met_ave, fill = Histology)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = all_colors[c("SCC", "AC", "GAS", "Small")]) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("SCC", "AC"),
+                                     c("SCC", "GAS"),
+                                     c("SCC", "Small"),
+                                     c("AC", "GAS"),
+                                     c("AC", "Small"),
+                                     c("GAS", "Small")),
+                    p.adjust.method = "BH",
+                    label = "p.format",  # p値を数値で表示に変更
+                    label.format = function(p) {
+                      # 科学的表記で有効数字2桁に整形
+                      if (p < 0.0001) {
+                        return(sprintf("p = %.1e", signif(p, 2)))
+                      } else {
+                        return(sprintf("p = %.2g", p))
+                      }
+                    },
+                    hide.ns = FALSE,  # 有意でない場合も表示するよう変更
+                    size = 4,
+                    vjust = 0.1  # p値の位置を調整
+                   ) +
+  labs(#title = "HLA methylation between histological types",
+       x = "Histological type",
+       y = "HLA methylation (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+```{r fig.height=5, dpi=600}
+print(pHist_metx)
+```
+
+
+```{r fig.height=8, dpi=600}
+print(pHistology_met)
+print(pHPV_met)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS4B1.pdf", width = 6, height = 4)
+
+# 各プロットを順番に出力
+print(pHist_met)
+print(pHPV_met2)
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS4B2.pdf", width = 8, height = 8)
+
+# 各プロットを順番に出力
+print(pHistology_met)
+
+# PDFデバイスを閉じる
+dev.off()
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("FigS4C.pdf", width = 8, height = 6)
+
+# 各プロットを順番に出力
+print(pHPV_met)
+
+# PDFデバイスを閉じる
+dev.off()
+```
