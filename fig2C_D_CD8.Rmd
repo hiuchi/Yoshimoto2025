@@ -1,0 +1,91 @@
+---
+title: " Kaplan-Meier curve for CD8 in SCC"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+# Load necessary libraries
+library(readxl)
+library(survival)
+library(survminer)
+```
+
+```{r}
+# ファイルパスを指定
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version8.xlsx"
+
+# "原本"タブを読み込む
+data <- read_excel(file_path, sheet = "SCC")
+
+# データの確認
+head(data)
+```
+
+#####CD8 infiltrationでのPFS#####
+```{r}
+# Create the Kaplan-Meier survival object for PFS
+surv_object_pfs1 <- Surv(time = data$PFS, event = data$再発)
+
+# Fit the survival model for PFS
+fit_pfs1 <- survfit(surv_object_pfs1 ~ CD8_infilt, data = data)
+```
+
+```{r fig.width=6,fig.height=6, dpi=600}
+# Plot the Kaplan-Meier curve for PFS without confidence interval shading
+km_plot_pfs_no_fill1 <- ggsurvplot(fit_pfs1, data = data,
+                                  palette = c("#325e9a", "lightblue", "red"),  
+                                  risk.table = TRUE,
+                                  pval = TRUE,
+                                  conf.int = FALSE,  # if you want confidence interval shading, select"TRUE"
+                                  legend.labs = c("absent", "excluded", "infiltrated"),
+                                  legend.title = "CD8 patterns",
+                                  xlab = "Time (PFS)",
+                                  ylab = "Survival Probability",
+                                  title = "Progression-free survival in CD8 patterns (SCC)",
+                                  font.main = c(16, "bold"),     # タイトルのサイズを16に、太字に
+                                  font.legend = c(16, "bold"))   # 凡例の文字を14に、太字に
+
+# Print the plot
+print(km_plot_pfs_no_fill1)
+```
+#####CD8 infiltrationでのOS#####
+```{r}
+# Create the Kaplan-Meier survival object for OS
+surv_object_OS1 <- Surv(time = data$OS, event = data$死亡)
+
+# Fit the survival model for OS
+fit_OS1 <- survfit(surv_object_OS1 ~ CD8_infilt, data = data)
+```
+
+```{r fig.width=6,fig.height=6, dpi=600}
+# Plot the Kaplan-Meier curve for OS without confidence interval shading
+km_plot_OS_no_fill1 <- ggsurvplot(fit_OS1, data = data,
+                                  palette = c("#325e9a", "lightblue", "red"), 
+                                  risk.table = TRUE,
+                                  pval = TRUE,
+                                  conf.int = FALSE,  # if you want confidence interval shading, select"TRUE"
+                                  legend.labs = c("absent", "excluded", "infiltrated"),
+                                  legend.title = "CD8 patterns",
+                                  xlab = "Time (OS)",
+                                  ylab = "Survival Probability",
+                                  title = "Overall survival in CD8 patterns (SCC)",
+                                  font.main = c(16, "bold"),     # タイトルのサイズを16に、太字に
+                                  font.legend = c(16, "bold"))   # 凡例の文字を14に、太字に
+
+# Print the plot
+print(km_plot_OS_no_fill1)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig2C, D.pdf", width = 6, height = 6)
+
+# 各プロットを順番に出力
+print(km_plot_pfs_no_fill1)
+print(km_plot_OS_no_fill1)
+
+# PDFデバイスを閉じる
+dev.off()
+```
