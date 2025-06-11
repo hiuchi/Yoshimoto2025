@@ -1,0 +1,125 @@
+---
+title: "Fig1 B, D"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(gridExtra)
+```
+
+#   excel file load
+```{r}
+file_path <- "D://大学院資料//頸癌データベース//fig//HLA解析_version8.xlsx"
+data <- read_excel(file_path, sheet = "original")
+head(data)
+```
+
+# Function to create pie chart
+```{r  dpi=600}
+create_pie_chart <- function(data, column, title) {
+  df_proportions <- data %>% 
+    dplyr::count(!!sym(column)) %>% 
+    mutate(proportion = n / sum(n))
+  
+  # カスタムカラーを設定
+  custom_colors_3 <- c("absent" = "#325e9a", "excluded" = "lightblue", "infiltrated" = "red")
+  custom_colors_2 <- c("neg"="#325e9a", "pos"="#fd6921", "absent" = "#325e9a", "excluded" = "lightblue")
+  n_categories <- nrow(df_proportions)
+  colors_to_use <- if (n_categories > 2) custom_colors_3 else custom_colors_2
+  
+  p <- ggplot(df_proportions, aes(x = "", y = proportion, fill = !!sym(column))) +
+    geom_bar(stat = "identity", width = 0.05, color = "white", size = 0.5) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values = colors_to_use, name = "CD8 patterns") +
+    theme_minimal() +
+    theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    panel.grid = element_blank(),
+    strip.text = element_text(size = 28, face = "bold"),
+    legend.title = element_text(size = 24, face = "bold"),
+    legend.text = element_text(size = 26),
+    plot.title = element_text(size = 26, face = "bold", hjust = 0.5),
+    plot.margin = margin(15, 15, 15, 15)
+    ) +
+    labs(title = title) +
+    geom_text(aes(label = scales::percent(proportion, accuracy = 0.1)), 
+              position = position_stack(vjust = 0.5), 
+              color = "white", size = 12, fontface = "bold")
+  
+  return(p)
+}
+```
+
+#CD8 infiltration pie chart
+```{r #CD8 infiltration pie chart, fig.height=6, fig.height=6, dpi=600}
+create_pie_chart(data, "filtration", "CD8 infiltration patterns (n=98)")
+cat("\nFiltration counts:\n")
+print(table(data$filtration))
+```
+
+```{r CD8 scores between filtration status, fig.height=4, dpi=600}
+custom_colors_3 <- c("absent" = "#325e9a", "excluded" = "lightblue", "infiltrated" = "red")
+kw_test <- kruskal.test(CD8_number ~ filtration, data = data)
+
+p6 <- ggplot(data, aes(x = filtration, y = CD8_number, fill = filtration)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.6) +
+  scale_fill_manual(values = custom_colors_3) +
+  stat_compare_means(method = "wilcox.test",
+                    comparisons = list(c("excluded", "absent"),
+                                     c("infiltrated", "excluded"),
+                                     c("infiltrated", "absent")),
+                    p.adjust.method = "BH",
+                    label = "p.signif",
+                    symnum.args = list(
+                      cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                      symbols = c("***", "**", "*", "")
+                    ),
+                    hide.ns = TRUE,  # 有意でない場合のブラケットを非表示
+                     size = 6 ,
+                      vjust = 0.5  # アスタリスクの位置を調整
+                     ) +
+  labs(title = "CD8 scores between infiltration patterns",
+       x = "CD8 infiltration patterns",
+       y = "CD8 score (%)") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(color = "black", face = "bold", size = 24),
+    axis.text.y = element_text(color = "black", face = "bold", size = 10),  
+    axis.title.x = element_text(face = "bold", size = 24), 
+    axis.title.y = element_text(face = "bold", size = 24),  
+    title = element_text(color = "black", face = "bold", size = 24),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  )
+library(gridExtra)
+grid.arrange(p6, ncol = 1)
+```
+
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig1B.pdf", width = 8, height = 6)
+
+# 各プロットを順番に出力
+create_pie_chart(data, "filtration", "CD8 infiltration patterns (n=98)")
+
+# PDFデバイスを閉じる
+dev.off()
+```
+```{r}
+# 現在の作業ディレクトリ（RMDファイルと同じ場所）にPDFを保存
+pdf("Fig1D.pdf", width = 6, height = 4)
+
+print(p6)
+
+# PDFデバイスを閉じる
+dev.off()
+```
