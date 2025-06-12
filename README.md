@@ -1,1 +1,1 @@
-# List of source codes executed in Yoshimoto et al., 2025
+# List of source codes of Yoshimoto et al., 2025
