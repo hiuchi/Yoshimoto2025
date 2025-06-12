@@ -1,6 +1,6 @@
 #!/bin/bash
 
-samples=$(find /data2/TCGA-CESC/v42/chr6 -maxdepth 1 -type f -name "*.bam" -printf "%f\n" | sed 's/\.bam$//')
+samples=$(find /data2/WES/data/ -maxdepth 1 -type d -name "Cx*" -printf "%f\n")
 
 # 処理を関数化
 run_lilac() {
@@ -10,7 +10,7 @@ run_lilac() {
         -ref_genome /data1/genomes/GRCh38_ENCODE/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta \
         -ref_genome_version V38 \
         -resource_dir /data1/HLA/241027_Lilac/resource/v6_0/ref/38/immune \
-        -tumor_bam "/data2/TCGA-CESC/v42/chr6/${sample}.bam" \
+        -tumor_bam "/data2/WES/data/${sample}/enrichment_seq/${sample}_tumor.bam" \
         -output_dir "./res/${sample}/"
 }
 
