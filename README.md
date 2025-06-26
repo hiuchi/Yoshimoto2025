@@ -1,1 +1,1 @@
-# List of source codes of Yoshimoto et al., 2025
+# Source code of Yoshimoto et al., 2025.
